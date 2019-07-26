@@ -1,0 +1,2 @@
+*.sample filter=lfs diff=lfs merge=lfs -text
+*.sample.txt filter=lfs diff=lfs merge=lfs -text

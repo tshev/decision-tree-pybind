@@ -1,0 +1,10 @@
+*.out
+*.pyc
+*.swp
+*.swo
+*linux-x86_64-3.7
+*linux-x86_64-3.6
+*linux-x86_64-3.5
+*.so
+*.egg-info
+*.o
