@@ -9,7 +9,7 @@
 
 template<typename I>
 inline
-I& operator>>(I&& cin, std::vector<int>& x) {
+I& operator>>(I& cin, std::vector<int>& x) {
     size_t n;
     cin >> n;
     x.resize(n);
@@ -19,10 +19,73 @@ I& operator>>(I&& cin, std::vector<int>& x) {
     return cin;
 }
 
+template<typename T>
+struct iterator2 {
+    T* values;
+    size_t rows;
+
+    iterator2() = default;
+    iterator2(const iterator2&) = default;
+    iterator2(T* values, size_t rows) noexcept : values(values), rows(rows) {}
+    //iterator2(const T* values, size_t rows) noexcept : values(values), rows(rows) {}
+
+    friend
+    inline
+    bool operator==(const iterator2& x, const iterator2& y) {
+        return x.values == y.values && x.rows == y.rows;
+    }
+
+    friend
+    inline
+    bool operator!=(const iterator2& x, const iterator2& y) {
+        return !(x == y);
+    }
+   
+    iterator2& operator++() {
+        values += rows;
+        return *this;
+    }
+
+    T& operator*() { // oops (wrong)
+        return *values;
+    }
+
+    const T& operator*() const {  // oops (wrong)
+        return *values;
+    }
+
+    T* begin() {
+        return values; // probably, dereferencing should return
+    }
+
+    T* end() {
+        return values + rows;
+    }
+
+    friend
+    inline
+    size_t operator-(const iterator2& x, const iterator2& y) {
+        return (x.values - y.values) / x.rows;
+    }
+
+    friend
+    inline
+    iterator2 operator+(const iterator2& x, size_t y) {
+        return iterator2{x.values + x.rows * y, x.rows};
+    }
+
+    friend
+    inline
+    iterator2 operator+(size_t y, const iterator2& x) {
+        return iterator2{x.values + x.rows * y, x.rows};
+    }
+
+};
+
 
 template<typename I>
 inline
-I& operator<<(I&& cout, const std::vector<int>& x) {
+I& operator<<(I& cout, const std::vector<int>& x) {
     cout << x.size() << std::endl;;
     for (auto a : x) {
         cout << a << " ";
@@ -40,8 +103,32 @@ public:
     matrix() {}
     matrix(size_t rows, size_t cols) : values(rows * cols), rows_(rows), cols_(cols) {}
 
+    matrix(const double *data, size_t rows, size_t cols) : values(rows * cols), rows_(rows), cols_(cols) {
+        for (size_t i = 0; i < rows; ++i) {
+            for (size_t j = 0; j < cols; ++j) {
+                (*this)(i, j) = *data;
+                ++data;
+            }
+        }
+    }
+
     size_t rows() const { return rows_; }
     size_t cols() const { return cols_; }
+
+    T* data() {
+        return values.data();
+    }
+
+    iterator2<T> begin() {
+        T* d = &values[0];
+        return iterator2<T>{d, rows_};
+    }
+
+    iterator2<T> end() {
+        T* d = &values[0];
+        return iterator2<T>{d + values.size(), rows_};
+    }
+
 
     T& operator()(size_t i, size_t j) {
         return values[j * rows_ + i];
@@ -86,76 +173,6 @@ public:
         }
         return o;
     }
-   
-
-    struct iterator2 {
-        T* values;
-        size_t rows;
-
-        friend
-        inline
-        bool operator==(const iterator2& x, const iterator2& y) {
-            return x.values == y.values && x.rows == y.rows;
-        }
-
-        friend
-        inline
-        bool operator!=(const iterator2& x, const iterator2& y) {
-            return !(x == y);
-        }
-       
-        iterator2& operator++() {
-            values += rows;
-            return *this;
-        }
-
-        T& operator*() { // oops (wrong)
-            return *values;
-        }
-
-        const T& operator*() const {  // oops (wrong)
-            return *values;
-        }
-
-        T* begin() {
-            return values; // probably, dereferencing should return
-        }
-
-        T* end() {
-            return values + rows;
-        }
-
-        friend
-        inline
-        size_t operator-(const iterator2& x, const iterator2& y) {
-            return (x.values - y.values) / x.rows;
-        }
-
-        friend
-        inline
-        iterator2 operator+(const iterator2& x, size_t y) {
-            return iterator2{x.values + x.rows * y, x.rows};
-        }
-
-        friend
-        inline
-        iterator2 operator+(size_t y, const iterator2& x) {
-            return iterator2{x.values + x.rows * y, x.rows};
-        }
-
-    };
-
-    iterator2 begin() {
-        T* d = &values[0];
-        return iterator2{d, rows_};
-    }
-
-    iterator2 end() {
-        T* d = &values[0];
-        return iterator2{d + values.size(), rows_};
-    }
-
-
 };
 
 template<typename T>
@@ -233,10 +250,6 @@ size_t partition_sample(It0 f0, It0 l0, It1 f1, It1 l1, size_t left_stride, size
 template<typename T, typename Criterion>
 struct decision_tree {
     typedef T value_type;
-
-    Criterion criterion;
-    std::mt19937 g;
-
     struct node_t {
         size_t feature_id;
         size_t dominant_class;
@@ -245,8 +258,12 @@ struct decision_tree {
         node_t* right = nullptr;
     };
 
-    node_t* root;
 
+    node_t* root;
+    std::mt19937 g;
+    Criterion criterion;
+
+    
     struct reducer {
         // is was a huge lambda function (possible source of slow down)
         typedef typename std::vector<std::tuple<value_type, size_t>>::iterator iterator;
@@ -278,6 +295,8 @@ struct decision_tree {
         }
     };
 public:
+    decision_tree() : root(nullptr), g(0) {}
+
     template<typename It0, typename It1>
     decision_tree(size_t seed, size_t max_unique_values_per_feature, It0 f0, It0 l0, It1 f1, It1 l1) : g(seed) {
         this->root = new node_t;
@@ -287,6 +306,30 @@ public:
             delete_tree(root);
         }
     }
+
+    decision_tree(const decision_tree&) = delete;
+
+    decision_tree(decision_tree&& x) : root(x.root) {
+        x.root = nullptr;
+    }
+
+    decision_tree& operator=(decision_tree&& x) {
+        if (root != nullptr) { delete_tree(root); }
+        root = x.root;
+        x.root = nullptr;
+        return *this;
+    }
+
+    void delete_tree(node_t* root_node) {
+        if (root_node == nullptr) return;
+        node_t* l = root_node ->left;
+        node_t* r = root_node->right;
+        delete root_node;
+        delete_tree(l);
+        delete_tree(r);
+    }
+
+
 
     template<typename It0, typename It1>
     bool build_tree(size_t max_unique_values_per_feature, It0 f0, It0 l0, It1 f1, It1 l1, size_t left_stride, size_t right_stride, node_t* root_node) {
@@ -367,15 +410,6 @@ public:
         return true;
     }
 
-    void delete_tree(node_t* root_node) {
-        if (root_node == nullptr) return;
-        node_t* l = root_node ->left;
-        node_t* r = root_node->right;
-        delete root_node;
-        delete_tree(l);
-        delete_tree(r);
-    }
-
      ~decision_tree() {
         delete_tree(this->root);
      }
@@ -411,6 +445,7 @@ public:
     
     template<typename It>
     size_t operator()(It first) {
+        if (root == nullptr) { throw std::runtime_error("Decision tree is empty"); }
         return this->operator()(first, root);
     }
 };
@@ -434,21 +469,4 @@ double precision(It0 first0, It0 last0, It1 first1, T x) {
 }
 
 
-int main() {
-    std::fstream istream_xy_train("m1.txt");
-    matrix<double> x_train;
-    istream_xy_train >> x_train;
-    std::vector<int> y_train;
-    istream_xy_train >> y_train;
-    assert(x_train.rows() != 0 && x_train.cols() != 0 && y_train.size() == x_train.rows());
 
-    size_t seed = 3;
-    size_t max_unique_values_per_feature = 100;
-    
-    decision_tree<double, gini<double>> dt(seed, max_unique_values_per_feature, x_train.begin(), x_train.end(), y_train.begin(), y_train.end());
-
-    std::vector<int> y_predicted(y_train.size());
-    dt(x_train.begin(), x_train.end(), y_predicted.begin());
-
-    std::cout << "precision=" << precision(y_predicted.begin(), y_predicted.end(), y_train.begin(), 0.0) << std::endl;;
-}

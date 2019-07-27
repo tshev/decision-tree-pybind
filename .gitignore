@@ -8,3 +8,4 @@
 *.so
 *.egg-info
 *.o
+*__pycache__
