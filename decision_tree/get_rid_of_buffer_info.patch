@@ -1,0 +1,53 @@
+diff --git a/decision_tree/python/decision_tree_module/pybind/decision_tree_pybind.cc b/decision_tree/python/decision_tree_module/pybind/decision_tree_pybind.cc
+index 48add62..20dde23 100644
+--- a/decision_tree/python/decision_tree_module/pybind/decision_tree_pybind.cc
++++ b/decision_tree/python/decision_tree_module/pybind/decision_tree_pybind.cc
+@@ -35,29 +35,30 @@ PYBIND11_MODULE(decision_tree_pybind, m) {
+     py::class_<decision_tree_csl>(m, "DecisionTree")
+         .def(py::init<size_t, size_t>())
+         .def(py::init<py::kwargs>())
+-        .def("fit", [](decision_tree_csl& cls, py::array_t<double> data, py::array_t<int> target) {
+-            py::buffer_info xbuff = data.request();
+-            size_t rows = xbuff.shape[0];
+-            size_t cols  = xbuff.shape[1];
++        .def("fit", [](decision_tree_csl& cls, const py::array_t<double>& x, const py::array_t<int>& target) {
++            if (x.ndim() != 2) {
++                throw std::runtime_error("x should have 2 dimensions");
++            }
++
++            size_t rows = x.shape(0);
++            size_t cols  = x.shape(1);
++
++            const double* x_data = (const double*)x.data();
++            matrix <double> m(x_data, rows, cols);
+ 
+-            double* x_data = (double*)xbuff.ptr;
+-            iterator2<double> first0(x_data, rows);
+-            iterator2<double> last0(x_data + rows * cols, rows);
++            const int* y_data = (const int*)target.data();
++            std::vector<int> y(y_data, y_data + rows);
+ 
+-            auto ybuff = target.request();
+-            int* y_data = (int*)ybuff.ptr;
+-            matrix <double> m((const double*)x_data, rows, cols);
+-            decision_tree_csl::decision_tree_type dt_new(cls.random_state, cls.max_unique_values_per_feature, m.begin(), m.end(), y_data, y_data + rows);
++            decision_tree_csl::decision_tree_type dt_new(cls.random_state, cls.max_unique_values_per_feature, m.begin(), m.end(), y.begin(), y.end());
+             cls.dt = std::move(dt_new);
+         })
+-        .def("predict", [](decision_tree_csl& cls, py::array_t<double> x) {
+-            auto buff = x.request();
+-            if (buff.ndim != 2) {
+-                throw std::runtime_error("X should have 2 dimensions");
++        .def("predict", [](decision_tree_csl& cls, const py::array_t<double>& x) {
++            if (x.ndim() != 2) {
++                throw std::runtime_error("x should have 2 dimensions");
+             }
+-            size_t rows = buff.shape[0];
+-            size_t cols = buff.shape[1];
+-            matrix<double> data_col_major((const double*)buff.ptr, rows, cols);
++            size_t rows = x.shape(0);
++            size_t cols = x.shape(1);
++            matrix<double> data_col_major((const double*)x.data(), rows, cols);
+ 
+             py::array_t<int> predictions(rows);
+             cls.dt(data_col_major.begin(), data_col_major.end(), (int*)predictions.request().ptr);
